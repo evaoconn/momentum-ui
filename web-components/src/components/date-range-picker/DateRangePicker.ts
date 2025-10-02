@@ -11,6 +11,7 @@ import { getLocaleDateFormat } from "@/utils/dateUtils";
 import { property } from "lit-element";
 import { DateTime } from "luxon";
 import { DatePicker } from "../datepicker/DatePicker";
+import { PropertyValues } from "lit";
 
 const DATE_RANGE_SEPARATOR = " - ";
 const DEFAULT_ARIA_LABEL = "Choose Date Range";
@@ -19,25 +20,19 @@ const DEFAULT_ARIA_LABEL_RANGE_SELECTED = "Choose Date Range, currently selected
 export namespace DateRangePicker {
   @customElementWithCheck("md-date-range-picker")
   export class ELEMENT extends DatePicker.ELEMENT {
-    @property({ type: String, attribute: "start-date", reflect: true })
-    startDate: string | undefined | null = undefined;
 
-    @property({ type: String, attribute: "end-date", reflect: true })
-    endDate: string | undefined | null = undefined;
+    @property({ type: String, attribute: "start-date", reflect: true }) public startDate: string | undefined | null = undefined;
+    @property({ type: String, attribute: "end-date", reflect: true }) public endDate: string | undefined | null = undefined;
+    @property({ type: Number, attribute: "max-range" }) public maxRange: number | undefined = undefined;
 
-    connectedCallback() {
+
+    public connectedCallback(): void {
       super.connectedCallback();
-      super.render();
-      this.addEventListener("date-pre-selection-change", this.handleDateSelection);
+      this.addEventListener("date-pre-selection-change", this.handleDateSelection as EventListener);
       this.updateValue();
     }
 
-    disconnectedCallback() {
-      super.disconnectedCallback();
-      this.removeEventListener("date-pre-selection-change", this.handleDateSelection);
-    }
-
-    updated(changedProperties: Map<string | number | symbol, unknown>) {
+    public updated(changedProperties: PropertyValues): void {
       super.updated(changedProperties);
 
       if (
@@ -48,19 +43,11 @@ export namespace DateRangePicker {
       }
     }
 
-    updateValue = () => {
-      if (this.startDate && this.endDate) {
-        const formatDate = (dateString: string) =>
-          this.useISOFormat
-            ? dateString
-            : DateTime.fromISO(dateString).toLocaleString(DateTime.DATE_SHORT, { locale: this.locale });
+    public disconnectedCallback(): void {
+      super.disconnectedCallback();
+      this.removeEventListener("date-pre-selection-change", this.handleDateSelection as EventListener);
+    }
 
-        const startDateString = formatDate(this.startDate);
-        const endDateString = formatDate(this.endDate);
-
-        this.value = `${startDateString}${DATE_RANGE_SEPARATOR}${endDateString}`;
-      }
-    };
 
     // overload
     protected getPlaceHolderString(): string {
@@ -74,25 +61,15 @@ export namespace DateRangePicker {
       return `${placeholder}${DATE_RANGE_SEPARATOR}${placeholder}`;
     }
 
-    // overload
-    isValueValid = (): boolean => {
+    protected isValueValid(): boolean {
       if (!this.validateDate) {
         return true;
       }
       const split = this.value?.split(DATE_RANGE_SEPARATOR) ?? [];
       return split.length === 2 && this.validateDateString(split[0]) && this.validateDateString(split[1]);
-    };
-
-    // empty overload to stop prevent super's value change
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    setSelected() {}
-
-    dateToSqlTranslate(date: DateTime) {
-      return date.toSQLDate();
     }
 
-    // overload
-    onApplyClick() {
+    protected onApplyClick(): void {
       this.emitDateRange();
       this.updateValue();
 
@@ -101,8 +78,7 @@ export namespace DateRangePicker {
       }
     }
 
-    // overload
-    protected getDefaultAriaLabel = (): string => {
+    protected getDefaultAriaLabel(): string {
       if (this.startDate && this.endDate) {
         const startDateISO = DateTime.fromISO(this.startDate);
         const endDateISO = DateTime.fromISO(this.endDate);
@@ -111,10 +87,33 @@ export namespace DateRangePicker {
         }
       }
       return DEFAULT_ARIA_LABEL;
-    };
+    }
 
-    handleDateSelection(e: any): void {
-      const selection: DateTime = e.detail.data;
+    // empty overload to stop prevent super's value change
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    protected setSelected(): void {}
+
+    
+    private updateValue(): void {
+      if (this.startDate && this.endDate) {
+        const formatDate = (dateString: string) =>
+          this.useISOFormat
+            ? dateString
+            : DateTime.fromISO(dateString).toLocaleString(DateTime.DATE_SHORT, { locale: this.locale });
+
+        const startDateString = formatDate(this.startDate);
+        const endDateString = formatDate(this.endDate);
+
+        this.value = `${startDateString}${DATE_RANGE_SEPARATOR}${endDateString}`;
+      }
+    }
+
+    private dateToSqlTranslate(date: DateTime): string | null {
+      return date.toSQLDate();
+    }
+
+    private readonly handleDateSelection = (e: CustomEvent<{ data: DateTime }>): void => {
+      const selection = e.detail.data;
       if (!selection) {
         return;
       }
@@ -144,7 +143,7 @@ export namespace DateRangePicker {
       this.updateValue();
     }
 
-    emitDateRange() {
+    private emitDateRange(): void {
       if (!this.startDate || !this.endDate) {
         return;
       }

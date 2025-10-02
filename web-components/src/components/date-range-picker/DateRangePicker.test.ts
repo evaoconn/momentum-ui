@@ -1,5 +1,4 @@
-import { now } from "@/utils/dateUtils";
-import { fixture, fixtureCleanup, html } from "@open-wc/testing-helpers";
+import { fixture, fixtureCleanup, html, nextFrame } from "@open-wc/testing-helpers";
 import { DateTime, Settings } from "luxon";
 import "./DateRangePicker";
 import { DateRangePicker } from "./DateRangePicker";
@@ -19,10 +18,10 @@ describe("DatePicker Component", () => {
   });
 
   afterEach(() => {
-    jest.clearAllTimers();
     jest.useRealTimers();
     fixtureCleanup();
   });
+
 
   test("should render", async () => {
     const el: DateRangePicker.ELEMENT = await fixtureFactory();
@@ -31,46 +30,50 @@ describe("DatePicker Component", () => {
 
   test("should return a SQL formatted date string", async () => {
     const el: DateRangePicker.ELEMENT = await fixture(html` <md-date-range-picker></md-date-range-picker> `);
-    const date = now();
-    const formatted = date.toSQLDate();
-    expect(el.dateToSqlTranslate(date)).toEqual(formatted);
+    const now = DateTime.local();
+    el.dispatchEvent(new CustomEvent("date-pre-selection-change", { detail: { data: now } }));
+    await jest.runAllTimers();
+    expect(el.startDate).toEqual(now.toSQLDate());
   });
 
-  test.each([[false], [true]])(
+  test.each([false, true])(
     "should handle date selection and value update automatically unless Apply button present (%s)",
     async (includeApplyButton: boolean) => {
       let el: DateRangePicker.ELEMENT;
-
       if (includeApplyButton) {
         el = await fixture(html`
           <md-date-range-picker
             .controlButtons=${{ apply: "APPLY" }}
-            .startDate=${"1970-01-01"}
-            .endDate=${"1970-01-02"}
+            start-date="1970-01-01"
+            end-date="1970-01-02"
           ></md-date-range-picker>
         `);
       } else {
         el = await fixture(html`
-          <md-date-range-picker .startDate=${"1970-01-01"} .endDate=${"1970-01-02"}></md-date-range-picker>
+          <md-date-range-picker start-date="1970-01-01" end-date="1970-01-02"></md-date-range-picker>
         `);
       }
-
-      await el.updateComplete;
 
       const defaultValue = "1970-01-01 - 1970-01-02";
 
       expect(el.value).toEqual(defaultValue);
 
-      const selectFunc = jest.spyOn(el, "handleDateSelection");
-      const updateFunc = jest.spyOn(el, "updateValue");
+      // @ts-expect-error spying on private method
+      const selectFuncSpy = jest.spyOn(el, "handleDateSelection");
+      // @ts-expect-error spying on private method
+      const updateFuncSpy = jest.spyOn(el, "updateValue");
 
-      el.handleDateSelection(new CustomEvent("date-pre-selection-change", { detail: { data: DATE1 } }));
-      expect(selectFunc).toHaveBeenCalledTimes(1);
-      expect(updateFunc).toHaveBeenCalledTimes(includeApplyButton ? 0 : 1);
+      el.dispatchEvent(
+        new CustomEvent("date-pre-selection-change", { detail: { data: DATE1 } })
+      );
+      jest.runAllTimers();
+      expect(selectFuncSpy).toHaveBeenCalledTimes(1);
+      expect(updateFuncSpy).toHaveBeenCalledTimes(includeApplyButton ? 0 : 1);
 
-      el.handleDateSelection(new CustomEvent("date-pre-selection-change", { detail: { data: DATE2 } }));
-      expect(selectFunc).toHaveBeenCalledTimes(2);
-      expect(updateFunc).toHaveBeenCalledTimes(includeApplyButton ? 0 : 2);
+      el.dispatchEvent(new CustomEvent("date-pre-selection-change", { detail: { data: DATE2 } }));
+      jest.runAllTimers();
+      expect(selectFuncSpy).toHaveBeenCalledTimes(2);
+      expect(updateFuncSpy).toHaveBeenCalledTimes(includeApplyButton ? 0 : 2);
 
       const newValue = "2025-04-15 - 2025-04-25";
 
@@ -78,7 +81,7 @@ describe("DatePicker Component", () => {
         expect(el.value).toEqual(defaultValue);
         const applyButton = el.shadowRoot!.querySelector("md-button.apply-button");
         applyButton?.dispatchEvent(new MouseEvent("button-click"));
-        expect(updateFunc).toHaveBeenCalledTimes(1);
+        expect(updateFuncSpy).toHaveBeenCalledTimes(1);
       }
 
       expect(el.value).toEqual(newValue);
@@ -167,14 +170,15 @@ describe("DatePicker Component", () => {
         data: DATE1
       }
     });
-    el.handleDateSelection(firstSelect);
-    el.handleDateSelection(secondSelect);
+    el.dispatchEvent(firstSelect);
+    el.dispatchEvent(secondSelect);
+    jest.runAllTimers();
     expect(el.startDate).toEqual(DATE1.toSQLDate());
     expect(el.endDate).toEqual(DATE2.toSQLDate());
   });
 
   test("should only emit date-range-change event when both start and end dates set", async () => {
-    const el: DateRangePicker.ELEMENT = new DateRangePicker.ELEMENT();
+    const el = await fixture<DateRangePicker.ELEMENT>(html`<md-date-range-picker></md-date-range-picker>`);
     expect(el.startDate).toBeUndefined();
     expect(el.endDate).toBeUndefined();
 
@@ -182,20 +186,22 @@ describe("DatePicker Component", () => {
     const eventSpy = jest.fn((event: CustomEvent) => {
       capturedEvent = event;
     }) as unknown as EventListener;
-    el.addEventListener("date-range-change", eventSpy as EventListener);
+    el.addEventListener("date-range-change", eventSpy);
 
-    el.handleDateSelection(
+    el.dispatchEvent(
       new CustomEvent("date-pre-selection-change", { detail: { data: DateTime.fromObject({ month: 1, day: 1 }) } })
     );
+    jest.runAllTimers();
     expect(el.startDate).not.toBeUndefined();
     expect(el.endDate).toBeUndefined();
 
     expect(eventSpy).not.toHaveBeenCalled();
     expect(capturedEvent).toBeNull();
 
-    el.handleDateSelection(
+    el.dispatchEvent(
       new CustomEvent("date-pre-selection-change", { detail: { data: DateTime.fromObject({ month: 1, day: 2 }) } })
     );
+    jest.runAllTimers();
     expect(el.startDate).not.toBeUndefined();
     expect(el.startDate).not.toBeUndefined();
 
@@ -243,7 +249,7 @@ describe("DatePicker Component", () => {
           data: dateA
         }
       });
-      el.handleDateSelection(firstSelect);
+      el.dispatchEvent(firstSelect);
       expect(el.startDate).toEqual(dateA.toSQLDate());
       expect(el.endDate).toBeUndefined();
 
@@ -252,7 +258,7 @@ describe("DatePicker Component", () => {
           data: dateB
         }
       });
-      el.handleDateSelection(secondSelect);
+      el.dispatchEvent(secondSelect);
       // why use OR for the following two expects?
       // see above "should correctly assign start/end values if use enters in reverse order" test
       expect(el.startDate === dateA.toSQLDate() || el.startDate === dateB.toSQLDate()).toBeTruthy();
@@ -263,7 +269,7 @@ describe("DatePicker Component", () => {
           data: dateC
         }
       });
-      el.handleDateSelection(thirdSelect);
+      el.dispatchEvent(thirdSelect);
       expect(el.startDate).toEqual(dateC.toSQLDate());
       expect(el.endDate).toBeUndefined();
 
@@ -272,7 +278,7 @@ describe("DatePicker Component", () => {
           data: dateD
         }
       });
-      el.handleDateSelection(fourthSelect);
+      el.dispatchEvent(fourthSelect);
       expect(el.startDate === dateC.toSQLDate() || el.startDate === dateD.toSQLDate()).toBeTruthy();
       expect(el.endDate === dateC.toSQLDate() || el.endDate === dateD.toSQLDate()).toBeTruthy();
     });
@@ -381,8 +387,8 @@ describe("DatePicker Component", () => {
         <md-date-range-picker .startDate=${DATE1.toSQLDate()} .endDate=${DATE2.toSQLDate()} .useISOFormat=${false}>
         </md-date-range-picker>
       `);
-      el.handleDateSelection(new CustomEvent("date-pre-selection-change", { detail: { data: DATE3 } }));
-      el.handleDateSelection(new CustomEvent("date-pre-selection-change", { detail: { data: DATE4 } }));
+      el.dispatchEvent(new CustomEvent("date-pre-selection-change", { detail: { data: DATE3 } }));
+      el.dispatchEvent(new CustomEvent("date-pre-selection-change", { detail: { data: DATE4 } }));
       expect(el.value).toBe("01/05/2025 - 31/05/2025");
     });
 

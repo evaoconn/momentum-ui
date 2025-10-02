@@ -18,6 +18,15 @@
       "runtimeExecutable": "${workspaceRoot}/node_modules/.bin/babel-node",
       "runtimeArgs": ["--presets", "@babel/preset-env"],
       "program": "${file}"
+    },
+    {
+      "name": "[web-components] debug tests",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "yarn",
+      "runtimeArgs": ["test"],
+      "cwd": "${workspaceRoot}/web-components",
+      "args": ["\"${fileBasenameNoExtension}\"", "--runInBand"]
     }
   ]
 }
